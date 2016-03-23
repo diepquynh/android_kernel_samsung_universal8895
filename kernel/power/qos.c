@@ -602,10 +602,7 @@ int pm_qos_update_target(struct pm_qos_constraints *c,
 	/*
 	 * send class of PM QoS request when notify_param is null.
 	 */
-	if (!notify_param &&
-	    !(req->pm_qos_class == PM_QOS_CPU_DMA_LATENCY ||
-	     req->pm_qos_class == PM_QOS_NETWORK_LATENCY ||
-	     req->pm_qos_class == PM_QOS_NETWORK_THROUGHPUT)) {
+	if (!notify_param) {
 		req = container_of(node, struct pm_qos_request, node);
 		notify_param = (void *)(&req->pm_qos_class);
 	}
@@ -617,12 +614,27 @@ int pm_qos_update_target(struct pm_qos_constraints *c,
 		return 1;
 	}
 
+	/*
+	 * if cpu mask bits are set, call the notifier call chain
+	 * to update the new qos restriction for the cores
+	 */
+	if (!cpumask_empty(&cpus) &&
+	    (req->pm_qos_class == PM_QOS_CPU_DMA_LATENCY ||
+	     req->pm_qos_class == PM_QOS_NETWORK_LATENCY ||
+	     req->pm_qos_class == PM_QOS_NETWORK_THROUGHPUT)) {
+		if (c->notifiers)
+			blocking_notifier_call_chain(c->notifiers,
+							(unsigned long)curr_value,
+							&cpus);
+		return 1;
+	}
+
 	if (prev_value != curr_value) {
 		ret = 1;
 		if (c->notifiers)
 			blocking_notifier_call_chain(c->notifiers,
 							(unsigned long)curr_value,
-							!notify_param ? &cpus : notify_param);
+							notify_param);
 	} else {
 		ret = 0;
 	}
