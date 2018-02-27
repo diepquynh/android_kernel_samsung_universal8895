@@ -603,7 +603,7 @@ struct root_domain {
 	cpumask_var_t online;
 
 	/* Indicate more than one runnable task for any CPU */
-	bool overload;
+	int overload;
 
 	/*
 	 * The bit corresponding to a CPU gets set here if such CPU has more
@@ -1474,7 +1474,7 @@ static inline void __add_nr_running(struct rq *rq, unsigned count)
 	if (prev_nr < 2 && rq->nr_running >= 2) {
 #ifdef CONFIG_SMP
 		if (!rq->rd->overload)
-			rq->rd->overload = true;
+			rq->rd->overload = 1;
 #endif
 
 #ifdef CONFIG_NO_HZ_FULL
