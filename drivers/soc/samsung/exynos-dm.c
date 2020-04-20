@@ -626,18 +626,22 @@ static bool max_flag = false;
 static int __policy_update_call_to_DM(enum exynos_dm_type dm_type, u32 min_freq, u32 max_freq)
 {
 	struct exynos_dm_data *dm;
+#ifdef CONFIG_EXYNOS_SNAPSHOT_DM
 	struct timeval pre, before, after;
+#endif
 #ifdef CONFIG_EXYNOS_ACPM
 	struct ipc_config config;
 	unsigned int cmd[4];
 	int size, ch_num, ret;
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_DM
 	s32 time = 0, pre_time = 0;
 
 	exynos_ss_dm((int)dm_type, min_freq, max_freq, pre_time, time);
 
 	do_gettimeofday(&pre);
 	do_gettimeofday(&before);
+#endif
 
 	dm = &exynos_dm->dm_data[dm_type];
 	if ((dm->policy_min_freq == min_freq) && (dm->policy_max_freq == max_freq))
@@ -672,6 +676,7 @@ static int __policy_update_call_to_DM(enum exynos_dm_type dm_type, u32 min_freq,
 #endif
 
 out:
+#ifdef CONFIG_EXYNOS_SNAPSHOT_DM
 	do_gettimeofday(&after);
 
 	pre_time = (before.tv_sec - pre.tv_sec) * USEC_PER_SEC +
@@ -680,6 +685,7 @@ out:
 		(after.tv_usec - before.tv_usec);
 
 	exynos_ss_dm((int)dm_type, min_freq, max_freq, pre_time, time);
+#endif
 
 	return 0;
 }
@@ -740,6 +746,7 @@ static int __DM_CALL(enum exynos_dm_type dm_type, unsigned long *target_freq)
 	int ret;
 	unsigned int relation = EXYNOS_DM_RELATION_L;
 	u32 old_min_freq;
+#ifdef CONFIG_EXYNOS_SNAPSHOT_DM
 	struct timeval pre, before, after;
 	s32 time = 0, pre_time = 0;
 
@@ -747,6 +754,7 @@ static int __DM_CALL(enum exynos_dm_type dm_type, unsigned long *target_freq)
 
 	do_gettimeofday(&pre);
 	do_gettimeofday(&before);
+#endif
 
 	dm = &exynos_dm->dm_data[dm_type];
 	old_min_freq = dm->min_freq;
@@ -796,6 +804,7 @@ static int __DM_CALL(enum exynos_dm_type dm_type, unsigned long *target_freq)
 		max_order[i] = DM_EMPTY;
 	}
 
+#ifdef CONFIG_EXYNOS_SNAPSHOT_DM
 	do_gettimeofday(&after);
 
 	pre_time = (before.tv_sec - pre.tv_sec) * USEC_PER_SEC +
@@ -804,6 +813,7 @@ static int __DM_CALL(enum exynos_dm_type dm_type, unsigned long *target_freq)
 		(after.tv_usec - before.tv_usec);
 
 	exynos_ss_dm((int)dm_type, *target_freq, 3, pre_time, time);
+#endif
 
 	return 0;
 }
