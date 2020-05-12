@@ -177,12 +177,6 @@ static struct dentry *zs_stat_root;
 static struct vfsmount *zsmalloc_mnt;
 #endif
 
-#ifdef CONFIG_ZSWAP_MIGRATION_SUPPORT
-static int zs_page_migration_enabled = 1;
-#else
-static int zs_page_migration_enabled;
-#endif
-
 /*
  * We assign a page to ZS_ALMOST_EMPTY fullness group when:
  *	n <= N / f, where
@@ -1990,9 +1984,6 @@ static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 	 * Page is locked so zspage couldn't be destroyed. For detail, look at
 	 * lock_zspage in free_zspage.
 	 */
-	if (!zs_page_migration_enabled)
-		return false;
-
 	VM_BUG_ON_PAGE(!PageMovable(page), page);
 	VM_BUG_ON_PAGE(PageIsolated(page), page);
 
@@ -2370,9 +2361,6 @@ static unsigned long zs_shrinker_scan(struct shrinker *shrinker,
 	return pages_freed ? pages_freed : SHRINK_STOP;
 }
 
-#define ZS_SHRINKER_THRESHOLD	1024
-#define ZS_SHRINKER_INTERVAL	10
-
 static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 		struct shrink_control *sc)
 {
@@ -2381,10 +2369,6 @@ static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 	unsigned long pages_to_free = 0;
 	struct zs_pool *pool = container_of(shrinker, struct zs_pool,
 			shrinker);
-	static unsigned long time_stamp;
-
-	if (!current_is_kswapd() || time_is_after_jiffies(time_stamp))
-		return 0;
 
 	for (i = ZS_SIZE_CLASSES - 1; i >= 0; i--) {
 		class = pool->size_class[i];
@@ -2395,11 +2379,6 @@ static unsigned long zs_shrinker_count(struct shrinker *shrinker,
 
 		pages_to_free += zs_can_compact(class);
 	}
-
-	if (pages_to_free > ZS_SHRINKER_THRESHOLD)
-		time_stamp = jiffies + (ZS_SHRINKER_INTERVAL * HZ);
-	else
-		pages_to_free = 0;
 
 	return pages_to_free;
 }
