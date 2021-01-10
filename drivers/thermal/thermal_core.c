@@ -640,7 +640,7 @@ static void update_temperature(struct thermal_zone_device *tz)
 #ifdef CONFIG_SEC_PM_DEBUG
 	if (!(count++ % TEMP_COUNT)) {
 		count = 1;
-		dev_info(&tz->device, "[TMU] last_temperature=%d, current_temperature=%d\n",
+		dev_dbg(&tz->device, "[TMU] last_temperature=%d, current_temperature=%d\n",
 			tz->last_temperature, tz->temperature);
 	}
 #endif
