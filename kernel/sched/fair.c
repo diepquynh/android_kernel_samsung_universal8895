@@ -6237,6 +6237,10 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 	if (capacity == max_capacity)
 		return true;
 
+	if (schedtune_prefer_perf(p) > 0 &&
+		is_slowest_cpu(cpu))
+		return false;
+
 	return __task_fits(p, cpu, 0);
 }
 
