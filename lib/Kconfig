@@ -548,7 +548,7 @@ config STACKDEPOT
 
 config KAIR
 	bool
-	default y
+	default n
 	help
 	  Library to support KAIR class as the realization of Elastic Capacity
 	  Vessel abstract theory.
@@ -556,7 +556,7 @@ config KAIR
 config SCHED_KAIR_GLUE
 	bool
 	depends on KAIR
-	default y
+	default n
 	help
 	  Glue interface sticking edge of CFS scheduler and smoother governor
 	  working based on KAIR concept strategy.
