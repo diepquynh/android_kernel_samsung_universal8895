@@ -4980,6 +4980,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 #endif
 	bool prefer_idle = schedtune_prefer_idle(p) > 0;
 
+	if (sched_feat(EXYNOS_MS))
+		prefer_idle |= schedtune_prefer_perf(p) > 0;
+
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.
