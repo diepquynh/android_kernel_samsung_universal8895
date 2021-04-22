@@ -224,6 +224,10 @@ static int find_min_util_cpu(const struct cpumask *mask, struct task_struct *p)
 		}
 	}
 
+	if (!cpu_selected(min_util_cpu) ||
+	    !is_cpu_preemptible(p, -1, min_util_cpu, 0))
+		return -1;
+
 	return min_util_cpu;
 }
 
@@ -278,7 +282,7 @@ static int select_eco_cpu(struct eco_env *eenv)
 	}
 
 	if (!cpu_selected(best_cpu))
-		return -1;
+		return eco_cpu;
 
 	/*
 	 * Compare prev cpu to best cpu to determine whether keeping the task
@@ -330,7 +334,8 @@ int select_energy_cpu(struct task_struct *p, int prev_cpu, int sd_flag, int sync
 		return -1;
 
 	if (sysctl_sched_sync_hint_enable && sync)
-		if (cpumask_test_cpu(cpu, &p->cpus_allowed))
+		if (cpumask_test_cpu(cpu, &p->cpus_allowed) &&
+		    is_cpu_preemptible(p, prev_cpu, cpu, sync))
 			return cpu;
 
 	/*
