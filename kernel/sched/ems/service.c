@@ -8,6 +8,7 @@
 #include <linux/kobject.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/ems.h>
 #include <linux/ems_service.h>
 #include <trace/events/ems.h>
 
@@ -126,6 +127,10 @@ select_prefer_cpu(struct task_struct *p, int coregroup_count, struct cpumask *pr
 	for (coregroup = 0; coregroup < coregroup_count; coregroup++) {
 		cpumask_and(&mask, &prefer_cpus[coregroup], cpu_active_mask);
 		if (cpumask_empty(&mask))
+			continue;
+
+		if (schedtune_task_boost(p) > 0 &&
+		    is_slowest_cpu(cpumask_first(&mask)))
 			continue;
 
 		for_each_cpu_and(cpu, &p->cpus_allowed, &mask) {
