@@ -195,6 +195,9 @@ static void vma_stop(struct proc_maps_private *priv)
 	release_task_mempolicy(priv);
 	up_read(&mm->mmap_sem);
 	mmput(mm);
+
+	sched_migrate_to_cpumask_end(to_cpumask(&priv->old_cpus_allowed),
+				     cpu_coregroup_mask(0));
 }
 
 static struct vm_area_struct *
@@ -230,6 +233,9 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 	mm = priv->mm;
 	if (!mm || !atomic_inc_not_zero(&mm->mm_users))
 		return NULL;
+
+	sched_migrate_to_cpumask_start(to_cpumask(&priv->old_cpus_allowed),
+				       cpu_coregroup_mask(0));
 
 	down_read(&mm->mmap_sem);
 	hold_task_mempolicy(priv);
