@@ -7,6 +7,7 @@
 
 #include <linux/cpufreq.h>
 #include <linux/of.h>
+#include <linux/ems.h>
 #include <trace/events/ems.h>
 
 #include "../sched.h"
@@ -216,11 +217,10 @@ static int find_min_util_cpu(const struct cpumask *mask, struct task_struct *p)
 
 	/* Find energy efficient cpu in each coregroup. */
 	for_each_cpu_and(cpu, mask, cpu_active_mask) {
-		unsigned long capacity_orig = capacity_orig_of(cpu);
 		unsigned long util = ml_task_attached_cpu_util(cpu, p);
 
 		/* Skip over-capacity cpu */
-		if (util >= capacity_orig)
+		if (lbt_util_bring_overutilize(cpu, util))
 			continue;
 
 		/*
@@ -268,11 +268,6 @@ static int select_eco_cpu(struct eco_env *eenv)
 			continue;
 
 		cpumask_and(&mask, cpu_coregroup_mask(cpu), tsk_cpus_allowed(eenv->p));
-		/*
-		 * Checking prev cpu is meaningless, because the energy of prev cpu
-		 * will be compared to best cpu at last
-		 */
-		cpumask_clear_cpu(eenv->prev_cpu, &mask);
 		if (cpumask_empty(&mask))
 			continue;
 
@@ -291,7 +286,7 @@ static int select_eco_cpu(struct eco_env *eenv)
 		}
 	}
 
-	if (!cpu_selected(best_cpu))
+	if (!cpu_selected(best_cpu) || best_cpu == eco_cpu)
 		return eco_cpu;
 
 	/*
