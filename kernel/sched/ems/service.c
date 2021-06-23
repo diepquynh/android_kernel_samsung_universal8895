@@ -22,6 +22,7 @@
 struct plist_head kpp_list[STUNE_GROUP_COUNT];
 
 static bool kpp_en;
+static bool kpp_active;
 
 int kpp_status(int grp_idx)
 {
@@ -35,6 +36,25 @@ int kpp_status(int grp_idx)
 		return 0;
 
 	return plist_last(&kpp_list[grp_idx])->prio;
+}
+
+bool is_kpp_active(void)
+{
+	return kpp_active;
+}
+
+static void update_kpp_status(void)
+{
+	int i;
+
+	for (i = 0; i < STUNE_GROUP_COUNT; i++) {
+		if (kpp_status(i) > 0) {
+			kpp_active = true;
+			return;
+		}
+	}
+
+	kpp_active = false;
 }
 
 static DEFINE_SPINLOCK(kpp_lock);
@@ -68,6 +88,8 @@ void kpp_request(int grp_idx, struct kpp *req, int value)
 	req->grp_idx = grp_idx;
 
 	spin_unlock_irqrestore(&kpp_lock, flags);
+
+	update_kpp_status();
 }
 
 static void __init init_kpp(void)

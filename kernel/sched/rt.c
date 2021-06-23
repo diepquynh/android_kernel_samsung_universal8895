@@ -9,6 +9,7 @@
 #include <linux/irq_work.h>
 #include <linux/of.h>
 #include <linux/ems.h>
+#include <linux/ems_service.h>
 
 #include "walt.h"
 #include "tune.h"
@@ -18,9 +19,13 @@
 #ifdef CONFIG_SCHED_USE_FLUID_RT
 struct frt_dom {
 	unsigned int		coverage_ratio;
+	unsigned int		coverage_ratio_boost;
 	unsigned int		coverage_thr;
+	unsigned int		coverage_thr_boost;
 	unsigned int		active_ratio;
+	unsigned int		active_ratio_boost;
 	unsigned int		active_thr;
+	unsigned int		active_thr_boost;
 	int			coregroup;
 	struct cpumask		cpus;
 
@@ -46,7 +51,9 @@ static struct kobject *frt_kobj;
 #define ratio_scale(v, r) (((v) * (r) * 10) >> RATIO_SCALE_SHIFT)
 
 static int frt_set_coverage_ratio(int cpu);
+static int frt_set_coverage_ratio_boost(int cpu);
 static int frt_set_active_ratio(int cpu);
+static int frt_set_active_ratio_boost(int cpu);
 struct frt_attr {
 	struct attribute attr;
 	ssize_t (*show)(struct kobject *, char *);
@@ -88,6 +95,13 @@ static ssize_t show_coverage_ratio(struct kobject *k, char *buf)
 	return sprintf(buf, "%u (%u)\n", dom->coverage_ratio, dom->coverage_thr);
 }
 
+static ssize_t show_coverage_ratio_boost(struct kobject *k, char *buf)
+{
+	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
+
+	return sprintf(buf, "%u (%u)\n", dom->coverage_ratio_boost, dom->coverage_thr_boost);
+}
+
 static ssize_t show_active_ratio(struct kobject *k, char *buf)
 {
 	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
@@ -95,10 +109,21 @@ static ssize_t show_active_ratio(struct kobject *k, char *buf)
 	return sprintf(buf, "%u (%u)\n", dom->active_ratio, dom->active_thr);
 }
 
+static ssize_t show_active_ratio_boost(struct kobject *k, char *buf)
+{
+	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
+
+	return sprintf(buf, "%u (%u)\n", dom->active_ratio_boost, dom->active_thr_boost);
+}
+
 frt_store(coverage_ratio, int, 100);
 frt_attr_rw(coverage_ratio);
+frt_store(coverage_ratio_boost, int, 100);
+frt_attr_rw(coverage_ratio_boost);
 frt_store(active_ratio, int, 100);
 frt_attr_rw(active_ratio);
+frt_store(active_ratio_boost, int, 100);
+frt_attr_rw(active_ratio_boost);
 
 static ssize_t show(struct kobject *kobj, struct attribute *at, char *buf)
 {
@@ -122,7 +147,9 @@ static const struct sysfs_ops frt_sysfs_ops = {
 
 static struct attribute *dom_frt_attrs[] = {
 	&coverage_ratio_attr.attr,
+	&coverage_ratio_boost_attr.attr,
 	&active_ratio_attr.attr,
+	&active_ratio_boost_attr.attr,
 	NULL
 };
 
@@ -167,7 +194,10 @@ static int frt_find_prefer_cpu(struct task_struct *task)
 	struct frt_dom *dom;
 
 	list_for_each_entry(dom, &frt_list, list) {
-		coverage_thr = per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr;
+		coverage_thr = (global_boosted() || is_kpp_active())
+			? per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr_boost
+			: per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr;
+
 		for_each_cpu_and(cpu, &task->cpus_allowed, &dom->cpus) {
 			allowed_cpu = cpu;
 			if (task->rt.avg.util_avg < coverage_thr)
@@ -192,6 +222,21 @@ static int frt_set_active_ratio(int cpu)
 	return 0;
 }
 
+static int frt_set_active_ratio_boost(int cpu)
+{
+	unsigned long capacity;
+	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
+
+	if (!dom || !cpu_active(cpu))
+		return -1;
+
+	capacity = get_cpu_max_capacity(cpu, 0) *
+			cpumask_weight(cpu_coregroup_mask(cpu));
+	dom->active_thr_boost = ratio_scale(capacity, dom->active_ratio_boost);
+
+	return 0;
+}
+
 static int frt_set_coverage_ratio(int cpu)
 {
 	unsigned long capacity;
@@ -202,6 +247,20 @@ static int frt_set_coverage_ratio(int cpu)
 
 	capacity = get_cpu_max_capacity(cpu, 0);
 	dom->coverage_thr = ratio_scale(capacity, dom->coverage_ratio);
+
+	return 0;
+}
+
+static int frt_set_coverage_ratio_boost(int cpu)
+{
+	unsigned long capacity;
+	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
+
+	if (!dom || !cpu_active(cpu))
+		return -1;
+
+	capacity = get_cpu_max_capacity(cpu, 0);
+	dom->coverage_thr_boost = ratio_scale(capacity, dom->coverage_ratio_boost);
 
 	return 0;
 }
@@ -243,7 +302,9 @@ static void update_activated_cpus(void)
 		}
 
 		capacity = get_cpu_max_capacity(first_cpu, 0) * cpumask_weight(&active_cpus);
-		dom_active_thr = ratio_scale(capacity, dom->active_ratio);
+		dom_active_thr = (global_boosted() || is_kpp_active())
+			? ratio_scale(capacity, dom->active_ratio_boost)
+			: ratio_scale(capacity, dom->active_ratio);
 
 		/* domain is idle */
 		if (dom_util_sum < dom_active_thr) {
@@ -312,16 +373,26 @@ static void frt_parse_dt(struct device_node *dn, struct frt_dom *dom, int cnt)
 	if (!dom->coverage_ratio)
 		dom->coverage_ratio = 100;
 
+	of_property_read_u32(coregroup, "coverage-ratio-boost", &dom->coverage_ratio_boost);
+	if (!dom->coverage_ratio_boost)
+		dom->coverage_ratio_boost = 100;
+
 	of_property_read_u32(coregroup, "active-ratio", &dom->active_ratio);
 	if (!dom->active_ratio)
 		dom->active_thr = 0;
+
+	of_property_read_u32(coregroup, "active-ratio-boost", &dom->active_ratio_boost);
+	if (!dom->active_ratio_boost)
+		dom->active_thr_boost = 0;
 
 	return;
 
 disable:
 	dom->coregroup = cnt;
 	dom->coverage_ratio = 100;
+	dom->coverage_ratio_boost = 100;
 	dom->active_thr = 0;
+	dom->active_thr_boost = 0;
 	pr_err("FRT(%s): failed to parse frt node\n", __func__);
 }
 
@@ -366,7 +437,9 @@ static int __init init_frt(void)
 			per_cpu(frt_rqs, tcpu) = dom;
 
 		frt_set_coverage_ratio(cpu);
+		frt_set_coverage_ratio_boost(cpu);
 		frt_set_active_ratio(cpu);
+		frt_set_active_ratio_boost(cpu);
 
 		list_add_tail(&dom->list, &frt_list);
 	}
