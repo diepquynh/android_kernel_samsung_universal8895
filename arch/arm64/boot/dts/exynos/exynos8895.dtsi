@@ -332,12 +332,16 @@
 				/* little cores */
 				coregroup0 {
 					coverage-ratio = <30>;
-					active-ratio = <25>;
+					coverage-ratio-boost = <30>;
+					active-ratio = <75>;
+					active-ratio-boost = <25>;
 				};
 				/* big cores */
 				coregroup1 {
 					coverage-ratio = <15>;
-					active-ratio = <5>;
+					coverage-ratio-boost = <15>;
+					active-ratio = <100>;
+					active-ratio-boost = <25>;
 				};
 			};
 
